@@ -4,8 +4,8 @@ use super::*;
 fn test_dates() -> GdsDateTimes {
     let test_date = NaiveDate::from_ymd(1970, 1, 1).and_hms(0, 0, 1);
     GdsDateTimes {
-        modified: test_date.clone(),
-        accessed: test_date.clone(),
+        modified: test_date,
+        accessed: test_date,
     }
 }
 #[test]

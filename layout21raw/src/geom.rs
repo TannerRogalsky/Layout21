@@ -211,9 +211,9 @@ impl ShapeTrait for Rect {
         // Create a four-sided polygon, cloning our corners
         Polygon {
             points: vec![
-                self.p0.clone(),
+                self.p0,
                 Point::new(self.p1.x, self.p0.y),
-                self.p1.clone(),
+                self.p1,
                 Point::new(self.p0.x, self.p1.y),
             ],
         }
@@ -270,17 +270,18 @@ impl ShapeTrait for Polygon {
                 } else {
                     // This is a non-horizontal segment. Check for intersection.
                     let xsolve = (next.x - past.x) * (pt.y - past.y) / (next.y - past.y) + past.x;
-
-                    if xsolve == pt.x {
+                    match xsolve.cmp(&pt.x) {
+                        std::cmp::Ordering::Less => (),
                         // This segment runs straight through the point. No need to check further.
-                        return true;
-                    } else if xsolve > pt.x {
-                        // We've got a hit on the semi-infinite horizontal line through `pt`.
-                        // Either increment or decrement the winding number.
-                        if next.y > past.y {
-                            winding_num += 1;
-                        } else {
-                            winding_num -= 1;
+                        std::cmp::Ordering::Equal => return true,
+                        std::cmp::Ordering::Greater => {
+                            // We've got a hit on the semi-infinite horizontal line through `pt`.
+                            // Either increment or decrement the winding number.
+                            if next.y > past.y {
+                                winding_num += 1;
+                            } else {
+                                winding_num -= 1;
+                            }
                         }
                     }
                 }

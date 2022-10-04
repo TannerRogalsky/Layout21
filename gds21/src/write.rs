@@ -31,7 +31,7 @@ impl<'wr> GdsWriter<'wr> {
     /// Helper to write a sequence of [GdsRecord] references
     fn write_records(&mut self, records: &[GdsRecord]) -> GdsResult<()> {
         for r in records {
-            self.write_record(&r)?;
+            self.write_record(r)?;
         }
         Ok(())
     }
@@ -489,11 +489,13 @@ pub struct GdsRecordList {
 impl Encode for GdsRecordList {
     /// Add a [GdsRecord] to the list
     fn encode_record(&mut self, record: GdsRecord) -> GdsResult<()> {
-        Ok(self.records.push(record))
+        self.records.push(record);
+        Ok(())
     }
     /// Add an array of [GdsRecord]s to the list
     fn encode_records(&mut self, records: &[GdsRecord]) -> GdsResult<()> {
-        Ok(self.records.extend(records.to_vec()))
+        self.records.extend(records.to_vec());
+        Ok(())
     }
 }
 

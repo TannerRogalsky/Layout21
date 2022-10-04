@@ -171,7 +171,7 @@ impl GdsReader {
             data = &mut data[0..len - 1];
         }
         // And convert to string
-        let s: String = std::str::from_utf8(&data)?.into();
+        let s: String = std::str::from_utf8(data)?.into();
         Ok(s)
     }
     /// Read `len` bytes
@@ -224,6 +224,7 @@ pub struct GdsStructScan {
     /// Struct Name
     name: String,
     /// Starting byte offset, at beginning of [BgnStruct]
+    #[allow(unused)]
     start: u64,
     /// Ending byte offset, at end of [EndStruct]
     end: u64,
@@ -273,7 +274,7 @@ impl GdsScanner {
     fn next(&mut self) -> GdsResult<GdsRecordHeader> {
         if self.peek().rtype == GdsRecordType::EndLib {
             // Once we reach [EndLib], keep returning it forever
-            return Ok(self.peek().clone());
+            return Ok(*self.peek());
         }
         // Decode a new header and swap it with our `nxt`
         let mut rv = self.rdr.read_record_header()?;
@@ -322,8 +323,10 @@ impl GdsScanner {
     fn scan_struct(&mut self) -> GdsResult<GdsStructScan> {
         // Create our scan-structure, and store the start-position of the struct.
         // Note this requires backing up the four header bytes.
-        let mut s = GdsStructScan::default();
-        s.start = self.pos() - 4;
+        let mut s = read::GdsStructScan {
+            start: self.pos() - 4,
+            ..Default::default()
+        };
         // Skip over the remainder of the [BeginStruct] header
         self.skip()?;
 
@@ -817,7 +820,7 @@ impl GdsParser {
             let s = serde_json::to_string(&entry).unwrap();
             write!(writer, "\t")?;
             writer.write_all(s.as_bytes()).unwrap();
-            write!(writer, ",\n")?;
+            writeln!(writer, ",")?;
         }
     }
     /// Open a GDS file `gds` and write all GdsRecords to JSON file `json`
@@ -829,11 +832,11 @@ impl GdsParser {
         // Create the JSON file
         let mut w = BufWriter::new(File::create(json)?);
         // Write it as a JSON list/sequence; add the opening bracket
-        write!(w, "[\n")?;
+        writeln!(w, "[")?;
         // Write all the records
         me.write_records(&mut w)?;
         // And close the list
-        write!(w, "]\n")?;
+        writeln!(w, "]")?;
         Ok(())
     }
 }

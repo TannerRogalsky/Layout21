@@ -187,7 +187,7 @@ impl GdsRecordType {
     /// Many are either deprecated or provisioned without ever being implemented;
     /// all from this list are deemed invalid.
     pub fn valid(&self) -> bool {
-        match self {
+        !matches! { self,
             Self::TextNode | // "Not currently used"
             Self::Spacing | // "Discontinued"
             Self::Uinteger | // "No longer used"
@@ -199,8 +199,6 @@ impl GdsRecordType {
             Self::LinkKeys |  // "Unreleased Feature"
             Self::StrClass | // "Only for Calma internal use"
             Self::Reserved   // "Reserved for future use"
-              => false,
-            _ => true,
         }
     }
 }
@@ -304,7 +302,7 @@ impl GdsFloat64 {
         // Extract the MSB Sign bit
         let neg = (val & 0x8000_0000_0000_0000) != 0;
         // Extract the 7b exponent
-        let exp: i32 = ((val & 0x7F00_0000_0000_0000) >> 8 * 7) as i32 - 64;
+        let exp: i32 = ((val & 0x7F00_0000_0000_0000) >> (8 * 7)) as i32 - 64;
         // Create the initially integer-valued mantissa from the 7 least-significant bytes
         let mantissa: u64 = val & 0x00FF_FFFF_FFFF_FFFF;
         // And apply its normalization to the range (1/16, 1)
@@ -368,20 +366,20 @@ pub struct GdsStrans {
 /// # Gds Text-Presentation Flags
 /// Sets fonts, text justification, and the like.
 /// Stored in raw `u8` form.
-#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GdsPresentation(u8, u8);
 
 /// # Gds Element Flags
 /// As configured by `ELFLAGS` records.
 /// Two bytes of bit-fields stored in raw `u8` form.
-#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GdsElemFlags(u8, u8);
 
 /// # Gds Plex
 /// From the spec:
 /// "A unique positive number which is common to all elements of the Plex to which this element belongs."
 /// In Gds21's experience, `PLEX` records and settings are highly uncommon.
-#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GdsPlex(i32);
 
 /// # Gds Library Units
@@ -486,7 +484,7 @@ impl GdsPoint {
 }
 /// # Gds Mask-Format Enumeration
 /// As set by the FORMAT record
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub enum GdsFormatType {
     /// Default, sole fully-supported case.
     Archive,
@@ -498,7 +496,7 @@ pub enum GdsFormatType {
 /// ```text
 /// PROPATTR PROPVALUE
 /// ```
-#[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GdsProperty {
     /// Attribute Number
     pub attr: i16,
@@ -514,7 +512,7 @@ pub struct GdsProperty {
 /// PATH [ELFLAGS] [PLEX] LAYER DATATYPE [PATHTYPE] [WIDTH] XY [BGNEXTN] [ENDEXTN])
 /// ```
 ///
-#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[builder(pattern = "owned", setter(into), private)]
 pub struct GdsPath {
     // Required Fields
@@ -563,7 +561,7 @@ pub struct GdsPath {
 /// BOUNDARY [ELFLAGS] [PLEX] LAYER DATATYPE XY
 /// ```
 ///
-#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[builder(pattern = "owned", setter(into), private)]
 pub struct GdsBoundary {
     // Required Fields
@@ -712,7 +710,7 @@ pub struct GdsTextElem {
 /// NODE [ELFLAGS] [PLEX] LAYER NODETYPE XY
 /// ```
 ///
-#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[builder(pattern = "owned", setter(into), private)]
 pub struct GdsNode {
     // Required Fields
@@ -742,7 +740,7 @@ pub struct GdsNode {
 /// BOX [ELFLAGS] [PLEX] LAYER BOXTYPE XY
 /// ```
 ///
-#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Default, Clone, Builder, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[builder(pattern = "owned", setter(into), private)]
 pub struct GdsBox {
     // Required Fields
@@ -791,7 +789,7 @@ pub enum GdsElement {
 ///
 /// Summary statistics for a [GdsLibrary] or [GdsStruct].  
 /// Total numbers of elements of each type.
-#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Add, AddAssign, Sub, SubAssign)]
+#[derive(Debug, Default, Deserialize, Serialize, PartialEq, Eq, Add, AddAssign, Sub, SubAssign)]
 pub struct GdsStats {
     libraries: usize,
     structs: usize,
@@ -805,7 +803,7 @@ pub struct GdsStats {
 }
 
 /// # Gds Modification Dates & Times
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct GdsDateTimes {
     /// Last Modification Date & Time
     pub modified: NaiveDateTime,
@@ -818,8 +816,8 @@ impl Default for GdsDateTimes {
     fn default() -> Self {
         let now = Utc::now().naive_utc();
         Self {
-            modified: now.clone(),
-            accessed: now.clone(),
+            modified: now,
+            accessed: now,
         }
     }
 }
@@ -984,8 +982,8 @@ impl GdsLibrary {
     }
     pub fn set_all_dates(&mut self, time: &NaiveDateTime) {
         let forced_gds_date = GdsDateTimes {
-            modified: time.clone(),
-            accessed: time.clone(),
+            modified: *time,
+            accessed: *time,
         };
         self.dates = forced_gds_date.clone();
         for gds_struct in &mut self.structs {

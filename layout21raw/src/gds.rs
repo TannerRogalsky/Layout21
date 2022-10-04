@@ -28,14 +28,14 @@ pub use gds21;
 impl Library {
     /// Convert to a GDSII Library
     pub fn to_gds(&self) -> LayoutResult<gds21::GdsLibrary> {
-        GdsExporter::export(&self)
+        GdsExporter::export(self)
     }
     /// Create from GDSII
     pub fn from_gds(
         gdslib: &gds21::GdsLibrary,
         layers: Option<Ptr<Layers>>,
     ) -> LayoutResult<Library> {
-        GdsImporter::import(&gdslib, layers)
+        GdsImporter::import(gdslib, layers)
     }
 }
 
@@ -140,7 +140,7 @@ impl<'lib> GdsExporter<'lib> {
 
         // Convert each [AbstractPort]
         for port in abs.ports.iter() {
-            elems.extend(self.export_abstract_port(&port)?);
+            elems.extend(self.export_abstract_port(port)?);
         }
 
         // Create and return a [GdsStruct]
@@ -157,9 +157,9 @@ impl<'lib> GdsExporter<'lib> {
         let mut elems = Vec::new();
         for (layerkey, shapes) in &port.shapes {
             // Export [LayerPurpose::Drawing] and [LayerPurpose::Pin] shapes for each
-            let drawing_spec = self.export_layerspec(&layerkey, &LayerPurpose::Drawing)?;
-            let pin_spec = self.export_layerspec(&layerkey, &LayerPurpose::Pin)?;
-            let label_spec = self.export_layerspec(&layerkey, &LayerPurpose::Label)?;
+            let drawing_spec = self.export_layerspec(layerkey, &LayerPurpose::Drawing)?;
+            let pin_spec = self.export_layerspec(layerkey, &LayerPurpose::Pin)?;
+            let label_spec = self.export_layerspec(layerkey, &LayerPurpose::Label)?;
             for shape in shapes.iter() {
                 elems.push(self.export_shape(shape, &drawing_spec)?);
                 elems.push(self.export_shape(shape, &pin_spec)?);
@@ -198,7 +198,7 @@ impl<'lib> GdsExporter<'lib> {
         // Convert the orientation to a [gds21::GdsStrans] option
         let mut strans = None;
         if inst.reflect_vert || inst.angle.is_some() {
-            let angle = inst.angle.map(|a| f64::from(a));
+            let angle = inst.angle;
             strans = Some(gds21::GdsStrans {
                 reflected: true,
                 angle,
@@ -226,12 +226,10 @@ impl<'lib> GdsExporter<'lib> {
             layers.get(*layer),
             format!("Layer {:?} Not Defined in Library {}", layer, self.lib.name),
         )?;
-        let xtype = self
-            .unwrap(
-                layer.num(purpose),
-                format!("LayerPurpose Not Defined for {:?}, {:?}", layer, purpose),
-            )?
-            .clone();
+        let xtype = self.unwrap(
+            layer.num(purpose),
+            format!("LayerPurpose Not Defined for {:?}, {:?}", layer, purpose),
+        )?;
         let layer = layer.layernum;
         Ok(gds21::GdsLayerSpec { layer, xtype })
     }
@@ -510,7 +508,7 @@ impl GdsImporter {
             ..Default::default()
         };
         // Run the main import method
-        importer.import_lib(&gdslib)?;
+        importer.import_lib(gdslib)?;
         // And destructure the result from our importer
         let Self {
             mut lib,
@@ -518,7 +516,7 @@ impl GdsImporter {
             unsupported,
             ..
         } = importer;
-        if unsupported.len() > 0 {
+        if !unsupported.is_empty() {
             println!(
                 "Read {} Unsupported GDS Elements: {:?}",
                 unsupported.len(),
@@ -548,7 +546,7 @@ impl GdsImporter {
         // Set its distance units
         self.lib.units = self.import_units(&gdslib.units)?;
         // And convert each of its `structs` into our `cells`
-        for strukt in &GdsDepOrder::order(&gdslib) {
+        for strukt in &GdsDepOrder::order(gdslib) {
             self.import_and_add(strukt)?
         }
         Ok(())
@@ -601,7 +599,7 @@ impl GdsImporter {
     fn import_layout(&mut self, strukt: &gds21::GdsStruct) -> LayoutResult<Layout> {
         let mut layout = Layout::default();
         let name = strukt.name.clone();
-        layout.name = name.clone();
+        layout.name = name;
         self.ctx.push(ErrorContext::Impl);
 
         // Importing each layout requires at least two passes over its elements.
@@ -624,12 +622,24 @@ impl GdsImporter {
                 GdsBoundary(ref x) => Yes(self.import_boundary(x)?),
                 GdsPath(ref x) => Yes(self.import_path(x)?),
                 GdsBox(ref x) => Yes(self.import_box(x)?),
-                GdsArrayRef(ref x) => No(layout.insts.extend(self.import_instance_array(x)?)),
-                GdsStructRef(ref x) => No(layout.insts.push(self.import_instance(x)?)),
-                GdsTextElem(ref x) => No(texts.push(x)),
+                GdsArrayRef(ref x) => {
+                    layout.insts.extend(self.import_instance_array(x)?);
+                    No(())
+                }
+                GdsStructRef(ref x) => {
+                    layout.insts.push(self.import_instance(x)?);
+                    No(())
+                }
+                GdsTextElem(ref x) => {
+                    texts.push(x);
+                    No(())
+                }
                 // GDSII "Node" elements are fairly rare, and are not supported.
                 // (Maybe some day we'll even learn what they are.)
-                GdsNode(ref x) => No(self.unsupported.push(x.clone().into())),
+                GdsNode(ref x) => {
+                    self.unsupported.push(x.clone().into());
+                    No(())
+                }
             };
             // If we got a new element, add it to our per-layer hash
             if let Yes(e) = e {
@@ -725,8 +735,8 @@ impl GdsImporter {
         {
             // That makes this a Rectangle.
             Shape::Rect(Rect {
-                p0: pts[0].clone(),
-                p1: pts[2].clone(),
+                p0: pts[0],
+                p1: pts[2],
             })
         } else {
             // Otherwise, it's a polygon
@@ -921,7 +931,7 @@ impl GdsImporter {
         Ok(Point::new(x, y))
     }
     /// Import a vector of [Point]s
-    fn import_point_vec(&mut self, pts: &Vec<gds21::GdsPoint>) -> LayoutResult<Vec<Point>> {
+    fn import_point_vec(&mut self, pts: &[gds21::GdsPoint]) -> LayoutResult<Vec<Point>> {
         pts.iter()
             .map(|p| self.import_point(p))
             .collect::<Result<Vec<_>, _>>()

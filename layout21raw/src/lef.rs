@@ -70,52 +70,58 @@ impl<'lib> LefExporter<'lib> {
     fn export_abstract(&mut self, abs: &Abstract) -> LayoutResult<lef21::LefMacro> {
         self.ctx.push(ErrorContext::Cell(abs.name.clone()));
         // Create the empty/default [lef21::LefMacro]
-        let mut lefmac = lef21::LefMacro::default();
-        // Convert our name
-        lefmac.name = abs.name.clone();
-        // Convert ports
-        for port in &abs.ports {
-            lefmac.pins.push(self.export_port(port)?);
-        }
-        // Convert blockages
-        for (layerkey, blockage) in &abs.blockages {
-            let obs = self.export_layer_shapes(*layerkey, blockage)?;
-            lefmac.obs.push(obs);
-        }
+        let lefmac = lef21::LefMacro {
+            name: abs.name.clone(),
+            pins: abs
+                .ports
+                .iter()
+                .map(|port| self.export_port(port))
+                .collect::<Result<_, _>>()?,
+            obs: abs
+                .blockages
+                .iter()
+                .map(|(layerkey, blockage)| self.export_layer_shapes(*layerkey, blockage))
+                .collect::<Result<_, _>>()?,
+            ..Default::default()
+        };
         self.ctx.pop();
         Ok(lefmac)
     }
     /// Export an [AbstractPort] to a [lef21::LefPin]
     fn export_port(&mut self, port: &AbstractPort) -> LayoutResult<lef21::LefPin> {
-        let mut pin = lef21::LefPin::default();
-        pin.name = port.net.clone();
-        // FIXME: export direction
-        pin.direction = None;
         // While Lef has a concept of "multiple ports per pin", we do not.
         // Genarated [LefPin]s always have one [LefPort]
-        let mut lefport = lef21::LefPort::default();
-        for (layerkey, shape) in &port.shapes {
-            lefport
-                .layers
-                .push(self.export_layer_shapes(*layerkey, shape)?);
-        }
-        pin.ports = vec![lefport];
+        let lefport = lef21::LefPort {
+            layers: port
+                .shapes
+                .iter()
+                .map(|(layerkey, shape)| self.export_layer_shapes(*layerkey, shape))
+                .collect::<Result<_, _>>()?,
+            ..Default::default()
+        };
+        let pin = lef21::LefPin {
+            name: port.net.clone(),
+            direction: None,
+            ports: vec![lefport],
+            ..Default::default()
+        };
         Ok(pin)
     }
     /// Export a set of [Shapes] on `layer` to a [LefLayerGeometries]
     fn export_layer_shapes(
         &mut self,
         layerkey: LayerKey,
-        shapes: &Vec<Shape>,
+        shapes: &[Shape],
     ) -> LayoutResult<lef21::LefLayerGeometries> {
         self.ctx.push(ErrorContext::Geometry);
-        let mut layer_geom = lef21::LefLayerGeometries::default();
-        // Set its layer (name)
-        layer_geom.layer_name = self.export_layer(layerkey)?;
-        // Export each shape
-        for shape in shapes {
-            layer_geom.geometries.push(self.export_shape(shape)?);
-        }
+        let layer_geom = lef21::LefLayerGeometries {
+            layer_name: self.export_layer(layerkey)?,
+            geometries: shapes
+                .iter()
+                .map(|shape| self.export_shape(shape))
+                .collect::<Result<_, _>>()?,
+            ..Default::default()
+        };
         self.ctx.pop();
         Ok(layer_geom)
     }
@@ -125,7 +131,7 @@ impl<'lib> LefExporter<'lib> {
         let layers = self.lib.layers.read()?;
         let name = self.unwrap(
             layers.get_name(layerkey),
-            format!("Invalid un-named layer for LEF export"),
+            "Invalid un-named layer for LEF export".to_string(),
         )?;
         Ok(name.to_string())
     }
@@ -192,7 +198,7 @@ impl LefImporter {
             ..Default::default()
         };
         // Run the main import method
-        importer.import_lib(&plib)?;
+        importer.import_lib(plib)?;
         // And destructure the result from our importer
         let Self {
             mut lib, layers, ..
@@ -208,7 +214,7 @@ impl LefImporter {
         self.lib.name = name;
 
         // Check for unsupported features
-        if leflib.sites.len() > 0 {
+        if !leflib.sites.is_empty() {
             self.warn("Ignored LEF feature: sites");
         }
         if let Some(sens) = &leflib.names_case_sensitive {
@@ -243,7 +249,7 @@ impl LefImporter {
     /// Import a [Cell]
     fn import_cell(&mut self, lefmacro: &lef21::LefMacro) -> LayoutResult<Cell> {
         self.ctx.push(ErrorContext::Cell(lefmacro.name.clone()));
-        let abs = self.import_abstract(&lefmacro)?;
+        let abs = self.import_abstract(lefmacro)?;
         let cell = Cell::from(abs);
         self.ctx.pop();
         Ok(cell)
@@ -263,7 +269,7 @@ impl LefImporter {
             let _layer = {
                 let mut layers = self.layers.write()?;
                 match layers.names.get("boundary") {
-                    Some(key) => key.clone(),
+                    Some(key) => *key,
                     None => {
                         let layernum = layers.nextnum()?; // FIXME: support no-number [Layer]s
                         let newlayer = Layer::new(layernum, "boundary");
@@ -349,13 +355,13 @@ impl LefImporter {
                 self.fail("Unsupported LEF Feature: nonzero spacing")?;
             }
         }
-        if geoms.vias.len() > 0 {
+        if !geoms.vias.is_empty() {
             self.warn("Ignored LEF Feature: vias");
         }
         // Import all the shapes
         let mut shapes = Vec::new();
         for geom in &geoms.geometries {
-            let shape = self.import_geometry(geom, &geoms)?;
+            let shape = self.import_geometry(geom, geoms)?;
             shapes.push(shape);
         }
         self.ctx.pop();
@@ -386,8 +392,8 @@ impl LefImporter {
         }
     }
     /// Import a [Shape::Poly]
-    fn import_polygon(&mut self, lefpoints: &Vec<lef21::LefPoint>) -> LayoutResult<Shape> {
-        let pts: Vec<Point> = self.import_point_vec(lefpoints)?;
+    fn import_polygon(&mut self, lefpoints: &[lef21::LefPoint]) -> LayoutResult<Shape> {
+        let pts: Vec<Point> = self.import_points(lefpoints)?;
         Ok(Shape::Polygon(Polygon { points: pts }))
     }
     /// Import a [Shape::Rect]
@@ -402,7 +408,7 @@ impl LefImporter {
     /// Import a [Shape::Path]
     fn import_path(
         &mut self,
-        pts: &Vec<lef21::LefPoint>,
+        pts: &[lef21::LefPoint],
         layer: &lef21::LefLayerGeometries,
     ) -> LayoutResult<Shape> {
         // Paths require that `layer` have a `width` attribute.
@@ -411,12 +417,12 @@ impl LefImporter {
         let width = self.import_dist(&width)?;
         let width = usize::try_from(width)?;
         // Convert each of the Points
-        let pts = self.import_point_vec(pts)?;
+        let pts = self.import_points(pts)?;
         // And return the path
         Ok(Shape::Path(Path { width, points: pts }))
     }
     /// Import a vector of [Point]s
-    fn import_point_vec(&mut self, pts: &Vec<lef21::LefPoint>) -> LayoutResult<Vec<Point>> {
+    fn import_points(&mut self, pts: &[lef21::LefPoint]) -> LayoutResult<Vec<Point>> {
         pts.iter()
             .map(|p| self.import_point(p))
             .collect::<Result<Vec<_>, _>>()

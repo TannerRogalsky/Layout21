@@ -32,8 +32,8 @@ impl BoundBox {
     /// The resultant [BoundBox] comprises solely the point, having zero area.
     pub fn from_point(pt: &Point) -> Self {
         Self {
-            p0: pt.clone(),
-            p1: pt.clone(),
+            p0: *pt,
+            p1: *pt,
         }
     }
     /// Create a new [BoundBox] from two points
@@ -89,20 +89,20 @@ pub trait BoundBoxTrait {
     /// Creates and returns a new [BoundBox].
     /// Default implementation is to return the intersection of `self.bbox()` and `bbox`.
     fn intersection(&self, bbox: &BoundBox) -> BoundBox {
-        self.bbox().intersection(&bbox)
+        self.bbox().intersection(bbox)
     }
     /// Compute the union with rectangular bounding box `bbox`.
     /// Creates and returns a new [BoundBox].
     /// Default implementation is to return the union of `self.bbox()` and `bbox`.
     fn union(&self, bbox: &BoundBox) -> BoundBox {
-        self.bbox().union(&bbox)
+        self.bbox().union(bbox)
     }
 }
 impl BoundBoxTrait for BoundBox {
     fn bbox(&self) -> BoundBox {
         // We're great as we are, as a [BoundBox] already.
         // Create a clone to adhere to our "new bbox" return-type.
-        self.clone()
+        *self
     }
     fn intersection(&self, bbox: &BoundBox) -> BoundBox {
         let pmin = Point::new(self.p0.x.max(bbox.p0.x), self.p0.y.max(bbox.p0.y));

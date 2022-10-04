@@ -150,9 +150,9 @@ impl Layers {
         let num = layer.layernum;
         let name = layer.name.clone();
         let key = self.slots.insert(layer);
-        self.nums.insert(num, key.clone());
+        self.nums.insert(num, key);
         if let Some(s) = name {
-            self.names.insert(s, key.clone());
+            self.names.insert(s, key);
         }
         key
     }
@@ -167,11 +167,11 @@ impl Layers {
     }
     /// Get a reference to the [LayerKey] for layer-number `num`
     pub fn keynum(&self, num: i16) -> Option<LayerKey> {
-        self.nums.get(&num).map(|x| x.clone())
+        self.nums.get(&num).copied()
     }
     /// Get a reference to the [LayerKey] layer-name `name`
     pub fn keyname(&self, name: impl Into<String>) -> Option<LayerKey> {
-        self.names.get(&name.into()).map(|x| x.clone())
+        self.names.get(&name.into()).copied()
     }
     /// Get a reference to [Layer] number `num`
     pub fn num(&self, num: i16) -> Option<&Layer> {
@@ -202,14 +202,14 @@ impl Layers {
     ) -> LayoutResult<(LayerKey, LayerPurpose)> {
         // Get the [LayerKey] for `layernum`, creating the [Layer] if it doesn't exist.
         let key = match self.keynum(layernum) {
-            Some(key) => key.clone(),
+            Some(key) => key,
             None => self.add(Layer::from_num(layernum)),
         };
         // Slightly awkwardly, get that [Layer] (back), so we can get or add a [LayerPurpose]
         let layer = self
             .slots
             .get_mut(key)
-            .ok_or(LayoutError::msg("Layer Not Found"))?;
+            .ok_or_else(|| LayoutError::msg("Layer Not Found"))?;
         // Get or create the corresponding [LayerPurpose]
         let purpose = match layer.purpose(purposenum) {
             Some(purpose) => purpose.clone(),
@@ -275,7 +275,7 @@ pub struct Layer {
 
 impl PartialOrd for Layer {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(&other))
+        Some(self.cmp(other))
     }
 }
 
@@ -433,7 +433,7 @@ impl<'lib> DepOrder<'lib> {
     }
     pub fn push(&mut self, ptr: &Ptr<Cell>) {
         // If the Cell hasn't already been visited, depth-first search it
-        if !self.seen.contains(&ptr) {
+        if !self.seen.contains(ptr) {
             // Read the cell-pointer
             let cell = ptr.read().unwrap();
             // If the cell has an implementation, visit its [Instance]s before inserting it
@@ -546,10 +546,10 @@ fn flatten_helper(
 
         // Create a new [Transform], cascading the parent's and instance's
         let inst_trans = Transform::from_instance(&inst.loc, inst.reflect_vert, inst.angle);
-        let trans = Transform::cascade(&trans, &inst_trans);
+        let trans = Transform::cascade(trans, &inst_trans);
 
         // And recursively add its elements
-        flatten_helper(&layout, &trans, elems)?;
+        flatten_helper(layout, &trans, elems)?;
     }
     Ok(())
 }

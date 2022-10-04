@@ -26,7 +26,7 @@ pub use layout21protos as proto;
 impl Library {
     /// Convert to ProtoBuf
     pub fn to_proto(&self) -> LayoutResult<proto::Library> {
-        ProtoExporter::export(&self)
+        ProtoExporter::export(self)
     }
     /// Create from ProtoBuf
     pub fn from_proto(plib: proto::Library, layers: Option<Ptr<Layers>>) -> LayoutResult<Library> {
@@ -51,16 +51,19 @@ impl<'lib> ProtoExporter<'lib> {
     fn export_lib(&mut self) -> LayoutResult<proto::Library> {
         self.ctx.push(ErrorContext::Library(self.lib.name.clone()));
         // Create a new [proto::Library]
-        let mut plib = proto::Library::default();
-        plib.units = self.export_units(&self.lib.units)?.into();
-        // Set its library name
-        plib.domain = self.lib.name.clone();
-        // And convert each of our cells
-        for cell in DepOrder::order(self.lib).iter() {
-            let cell = cell.read()?;
-            let pcell = self.export_cell(&*cell)?;
-            plib.cells.push(pcell);
-        }
+        let plib = layout21protos::Library {
+            units: self.export_units(&self.lib.units)?.into(),
+            domain: self.lib.name.clone(),
+            cells: DepOrder::order(self.lib)
+                .into_iter()
+                .map(|cell| {
+                    let cell = cell.read()?;
+                    let pcell = self.export_cell(&*cell)?;
+                    Ok(pcell)
+                })
+                .collect::<LayoutResult<_>>()?,
+            ..Default::default()
+        };
         self.ctx.pop();
         Ok(plib)
     }
@@ -76,16 +79,20 @@ impl<'lib> ProtoExporter<'lib> {
     /// Convert a [Cell] to a [proto::Cell] cell-definition
     fn export_cell(&mut self, cell: &Cell) -> LayoutResult<proto::Cell> {
         self.ctx.push(ErrorContext::Cell(cell.name.clone()));
-
-        let mut pcell = proto::Cell::default();
-        pcell.name = cell.name.clone();
-
-        if let Some(ref lay) = cell.layout {
-            pcell.layout = Some(self.export_layout(lay)?);
-        }
-        if let Some(ref a) = cell.abs {
-            pcell.r#abstract = Some(self.export_abstract(a)?);
-        }
+        let pcell = layout21protos::Cell {
+            name: cell.name.clone(),
+            layout: cell
+                .layout
+                .as_ref()
+                .map(|lay| self.export_layout(lay))
+                .transpose()?,
+            r#abstract: cell
+                .abs
+                .as_ref()
+                .map(|a| self.export_abstract(a))
+                .transpose()?,
+            ..Default::default()
+        };
         self.ctx.pop();
         Ok(pcell)
     }
@@ -93,20 +100,20 @@ impl<'lib> ProtoExporter<'lib> {
     fn export_abstract(&mut self, abs: &Abstract) -> LayoutResult<proto::Abstract> {
         self.ctx.push(ErrorContext::Abstract);
         // Create the new [proto::Abstract]
-        let mut pabs = proto::Abstract::default();
-        // Convert our name
-        pabs.name = abs.name.clone();
-        // Convert its ports
-        for port in abs.ports.iter() {
-            pabs.ports.push(self.export_abstract_port(&port)?);
-        }
-        // Convert its blockages
-        for (layerkey, shapes) in abs.blockages.iter() {
-            pabs.blockages
-                .push(self.export_abstract_blockages(layerkey, shapes)?);
-        }
-        // Convert its outline
-        pabs.outline = Some(self.export_polygon(&abs.outline)?);
+        let pabs = layout21protos::Abstract {
+            name: abs.name.clone(),
+            ports: abs
+                .ports
+                .iter()
+                .map(|port| self.export_abstract_port(port))
+                .collect::<LayoutResult<_>>()?,
+            blockages: abs
+                .blockages
+                .iter()
+                .map(|(layerkey, shapes)| self.export_abstract_blockages(layerkey, shapes))
+                .collect::<LayoutResult<_>>()?,
+            ..Default::default()
+        };
         // And we're done - pop the context and return
         self.ctx.pop();
         Ok(pabs)
@@ -117,8 +124,10 @@ impl<'lib> ProtoExporter<'lib> {
         layerkey: &LayerKey,
         shapes: &[Shape],
     ) -> LayoutResult<proto::LayerShapes> {
-        let mut pshapes = proto::LayerShapes::default();
-        pshapes.layer = Some(self.export_layerspec(&layerkey, &LayerPurpose::Obstruction)?);
+        let mut pshapes = layout21protos::LayerShapes {
+            layer: Some(self.export_layerspec(layerkey, &LayerPurpose::Obstruction)?),
+            ..Default::default()
+        };
         for shape in shapes.iter() {
             self.export_and_add_shape(shape, &mut pshapes)?;
         }
@@ -126,37 +135,44 @@ impl<'lib> ProtoExporter<'lib> {
     }
     /// Export an [AbstractPort]
     fn export_abstract_port(&mut self, port: &AbstractPort) -> LayoutResult<proto::AbstractPort> {
-        let mut pport = proto::AbstractPort::default();
-        pport.net = port.net.clone();
-        for (layerkey, shapes) in &port.shapes {
-            // Export the port's shapes. Each `layer` field uses our `Pin` [LayerPurpose].
-            let mut pshapes = proto::LayerShapes::default();
-            pshapes.layer = Some(self.export_layerspec(&layerkey, &LayerPurpose::Pin)?);
-            for shape in shapes.iter() {
-                self.export_and_add_shape(shape, &mut pshapes)?;
-            }
-        }
+        let pport = layout21protos::AbstractPort {
+            net: port.net.clone(),
+            shapes: port
+                .shapes
+                .iter()
+                .map(|(layerkey, shapes)| {
+                    // Export the port's shapes. Each `layer` field uses our `Pin` [LayerPurpose].
+                    let mut pshapes = layout21protos::LayerShapes {
+                        layer: Some(self.export_layerspec(layerkey, &LayerPurpose::Pin)?),
+                        ..Default::default()
+                    };
+                    for shape in shapes.iter() {
+                        self.export_and_add_shape(shape, &mut pshapes)?;
+                    }
+                    Ok(pshapes)
+                })
+                .collect::<LayoutResult<_>>()?,
+        };
         Ok(pport)
     }
     /// Convert a [Layout] to a [proto::Cell] cell-definition
     fn export_layout(&mut self, cell: &Layout) -> LayoutResult<proto::Layout> {
         self.ctx.push(ErrorContext::Impl);
         // Create the empty/default [proto::Layout]
-        let mut pcell = proto::Layout::default();
-        // Convert our name
-        pcell.name = cell.name.clone();
-        // Convert each [Instance]
-        pcell.instances = cell
-            .insts
-            .iter()
-            .map(|c| self.export_instance(c))
-            .collect::<Result<Vec<_>, _>>()?;
-        // Convert each [Instance]
-        pcell.annotations = cell
-            .annotations
-            .iter()
-            .map(|x| self.export_annotation(x))
-            .collect::<Result<Vec<_>, _>>()?;
+        let mut pcell = layout21protos::Layout {
+            name: cell.name.clone(),
+            instances: cell
+                .insts
+                .iter()
+                .map(|c| self.export_instance(c))
+                .collect::<Result<Vec<_>, _>>()?,
+            annotations: cell
+                .annotations
+                .iter()
+                .map(|x| self.export_annotation(x))
+                .collect::<Result<Vec<_>, _>>()?,
+            ..Default::default()
+        };
         // Collect up shapes by layer
         // FIXME: should we store them here this way in the first place? Perhaps.
         let mut layers: HashMap<(i16, i16), Vec<&Element>> = HashMap::new();
@@ -167,23 +183,24 @@ impl<'lib> ProtoExporter<'lib> {
             let number = layer.layernum;
             let purpose = layer
                 .num(&elem.purpose)
-                .ok_or("Invalid Layer Purpose / DataType")?
-                .clone();
-            if layers.contains_key(&(number, purpose)) {
-                layers.get_mut(&(number, purpose)).unwrap().push(elem);
-            } else {
-                layers.insert((number, purpose), vec![elem]);
+                .ok_or("Invalid Layer Purpose / DataType")?;
+            if let std::collections::hash_map::Entry::Vacant(e) = layers.entry((number, purpose)) {
+                e.insert(vec![elem]);
                 layerorder.push((number, purpose));
+            } else {
+                layers.get_mut(&(number, purpose)).unwrap().push(elem);
             }
         }
         // Now turn those into [proto::LayerShape]s
         for layernums in layerorder {
             let elems = layers.get(&layernums).unwrap();
-            let mut layershape = proto::LayerShapes::default();
-            layershape.layer = Some(proto::Layer {
-                number: layernums.0 as i64,
-                purpose: layernums.1 as i64,
-            });
+            let mut layershape = layout21protos::LayerShapes {
+                layer: Some(proto::Layer {
+                    number: layernums.0 as i64,
+                    purpose: layernums.1 as i64,
+                }),
+                ..Default::default()
+            };
             for elem in elems {
                 // Also sort into the proto-schema's by-shape-type vectors
                 match self.export_element(elem)? {
@@ -306,12 +323,10 @@ impl<'lib> ProtoExporter<'lib> {
             layers.get(*layer),
             format!("Layer {:?} Not Defined in Library {}", layer, self.lib.name),
         )?;
-        let purpose = self
-            .unwrap(
-                layer.num(purpose),
-                format!("LayerPurpose Not Defined for {:?}, {:?}", layer, purpose),
-            )?
-            .clone();
+        let purpose = self.unwrap(
+            layer.num(purpose),
+            format!("LayerPurpose Not Defined for {:?}, {:?}", layer, purpose),
+        )?;
         // Do a few numeric type conversions
         let purpose = purpose.into();
         let number = layer.layernum.into();
@@ -363,7 +378,7 @@ impl ProtoImporter {
             ..Default::default()
         };
         // Run the main import method
-        importer.import_lib(&plib)?;
+        importer.import_lib(plib)?;
         // And destructure the result from our importer
         let Self {
             mut lib, layers, ..
@@ -420,51 +435,58 @@ impl ProtoImporter {
     fn import_abstract(&mut self, pabs: &proto::Abstract) -> LayoutResult<Abstract> {
         self.ctx.push(ErrorContext::Abstract);
 
-        let mut abs = Abstract::default();
-
-        abs.name = pabs.name.clone();
-
-        for port in pabs.ports.iter() {
-            abs.ports.push(self.import_abstract_port(port)?);
-        }
-
-        for layershapes in pabs.blockages.iter() {
-            let proto::Layer { number, purpose } = layershapes.layer.as_ref().unwrap();
-            let (layerkey, _) = self
-                .layers
-                .write()
-                .unwrap()
-                .get_or_insert(*number as i16, *purpose as i16)
-                .unwrap();
-            let shapes = self.import_abstract_layer_shapes(layershapes)?;
-            abs.blockages.insert(layerkey, shapes);
-        }
-
-        abs.outline = match self.import_polygon(&pabs.outline.as_ref().unwrap())? {
-            Shape::Polygon(p) => p,
-            _ => unreachable!(
-                "import_polygon only returns the Shape::Polygon(Polygon) enum variant."
-            ),
+        let abs = Abstract {
+            name: pabs.name.clone(),
+            ports: pabs
+                .ports
+                .iter()
+                .map(|port| self.import_abstract_port(port))
+                .collect::<LayoutResult<_>>()?,
+            blockages: pabs
+                .blockages
+                .iter()
+                .map(|layershapes| {
+                    let proto::Layer { number, purpose } = layershapes.layer.as_ref().unwrap();
+                    let (layerkey, _) = self
+                        .layers
+                        .write()
+                        .unwrap()
+                        .get_or_insert(*number as i16, *purpose as i16)
+                        .unwrap();
+                    let shapes = self.import_abstract_layer_shapes(layershapes)?;
+                    Ok((layerkey, shapes))
+                })
+                .collect::<LayoutResult<_>>()?,
+            outline: match self.import_polygon(pabs.outline.as_ref().unwrap())? {
+                Shape::Polygon(p) => p,
+                _ => unreachable!(
+                    "import_polygon only returns the Shape::Polygon(Polygon) enum variant."
+                ),
+            },
         };
 
         Ok(abs)
     }
     /// Import an [AbstractPort]
     fn import_abstract_port(&mut self, pport: &proto::AbstractPort) -> LayoutResult<AbstractPort> {
-        let mut port = AbstractPort::default();
-        port.net = pport.net.clone();
-
-        for layershapes in pport.shapes.iter() {
-            let proto::Layer { number, purpose } = layershapes.layer.as_ref().unwrap();
-            let (layerkey, _) = self
-                .layers
-                .write()
-                .unwrap()
-                .get_or_insert(*number as i16, *purpose as i16)
-                .unwrap();
-            let shapes = self.import_abstract_layer_shapes(layershapes)?;
-            port.shapes.insert(layerkey, shapes);
-        }
+        let port = AbstractPort {
+            net: pport.net.clone(),
+            shapes: pport
+                .shapes
+                .iter()
+                .map(|layershapes| {
+                    let proto::Layer { number, purpose } = layershapes.layer.as_ref().unwrap();
+                    let (layerkey, _) = self
+                        .layers
+                        .write()
+                        .unwrap()
+                        .get_or_insert(*number as i16, *purpose as i16)
+                        .unwrap();
+                    let shapes = self.import_abstract_layer_shapes(layershapes)?;
+                    Ok((layerkey, shapes))
+                })
+                .collect::<LayoutResult<_>>()?,
+        };
 
         Ok(port)
     }
@@ -472,7 +494,7 @@ impl ProtoImporter {
     fn import_layout(&mut self, playout: &proto::Layout) -> LayoutResult<Layout> {
         let mut cell = Layout::default();
         let name = playout.name.clone();
-        cell.name = name.clone();
+        cell.name = name;
         self.ctx.push(ErrorContext::Impl);
 
         for inst in &playout.instances {
@@ -545,22 +567,23 @@ impl ProtoImporter {
     }
     /// Import a text annotation
     fn import_annotation(&mut self, x: &proto::TextElement) -> LayoutResult<TextElement> {
-        let mut e = TextElement::default();
-        e.string = x.string.clone();
-        e.loc = match x.loc {
-            Some(ref loc) => self.import_point(loc)?,
-            None => {
-                return self.fail(format!(
-                    "Invalid positionless proto::TextElement {}",
-                    x.string
-                ))
-            }
+        let e = TextElement {
+            string: x.string.clone(),
+            loc: match x.loc {
+                Some(ref loc) => self.import_point(loc)?,
+                None => {
+                    return self.fail(format!(
+                        "Invalid positionless proto::TextElement {}",
+                        x.string
+                    ))
+                }
+            },
         };
         Ok(e)
     }
     /// Import a [Shape::Poly]
     fn import_polygon(&mut self, ppoly: &proto::Polygon) -> LayoutResult<Shape> {
-        let points: Vec<Point> = self.import_point_vec(&ppoly.vertices)?;
+        let points: Vec<Point> = self.import_points(&ppoly.vertices)?;
         Ok(Shape::Polygon(Polygon { points }))
     }
     /// Import a [Shape::Rect]
@@ -576,7 +599,7 @@ impl ProtoImporter {
     }
     /// Import a [Shape::Path]
     fn import_path(&mut self, x: &proto::Path) -> LayoutResult<Shape> {
-        let points = self.import_point_vec(&x.points)?;
+        let points = self.import_points(&x.points)?;
         let width = usize::try_from(x.width)?;
         Ok(Shape::Path(Path { width, points }))
     }
@@ -629,7 +652,7 @@ impl ProtoImporter {
         let inst_name = pinst.name.clone();
         self.ctx.push(ErrorContext::Instance(inst_name.clone()));
         // Look up the cell-pointer, which must be imported by now, or we fail
-        let cell = self.import_reference(&pinst)?;
+        let cell = self.import_reference(pinst)?;
         // Unwrap the [Option] over (not really optional) location `origin_location`
         let origin_location = self.unwrap(
             pinst.origin_location.as_ref(),
@@ -660,7 +683,7 @@ impl ProtoImporter {
         Ok(Point::new(x, y))
     }
     /// Import a vector of [Point]s
-    fn import_point_vec(&mut self, points: &Vec<proto::Point>) -> LayoutResult<Vec<Point>> {
+    fn import_points(&mut self, points: &[proto::Point]) -> LayoutResult<Vec<Point>> {
         points
             .iter()
             .map(|p| self.import_point(p))
@@ -695,7 +718,7 @@ impl Layers {
         for layer_pb in &library_pb.layers {
             let layer = layers_by_number
                 .entry(layer_pb.index)
-                .or_insert(Layer::from_num(layer_pb.index as i16));
+                .or_insert_with(|| Layer::from_num(layer_pb.index as i16));
 
             let sub_index = layer_pb.sub_index as i16;
             let layer_purpose = match &layer_pb.purpose {
@@ -757,7 +780,7 @@ fn proto1() -> LayoutResult<()> {
             Element {
                 net: Some("prt_path_net".to_string()),
                 layer,
-                purpose: purpose.clone(),
+                purpose: purpose,
                 inner: Shape::Path(Path {
                     width: 5,
                     points: vec![Point::default(), Point::default(), Point::default()],
