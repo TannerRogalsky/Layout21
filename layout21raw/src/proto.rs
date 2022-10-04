@@ -16,8 +16,8 @@ use std::convert::{TryFrom, TryInto};
 // Local imports
 use crate::{
     utils::{ErrorContext, ErrorHelper, Ptr},
-    Abstract, AbstractPort, Cell, DepOrder, Element, Instance, Int, LayerKey, LayerPurpose, Layers,
-    Layer, Layout, LayoutError, LayoutResult, Library, Path, Point, Polygon, Rect, Shape,
+    Abstract, AbstractPort, Cell, DepOrder, Element, Instance, Int, Layer, LayerKey, LayerPurpose,
+    Layers, Layout, LayoutError, LayoutResult, Library, Path, Point, Polygon, Rect, Shape,
     TextElement, Units,
 };
 pub use layout21protos as proto;
@@ -521,7 +521,7 @@ impl ProtoImporter {
         player: &proto::LayerShapes,
     ) -> LayoutResult<Vec<Shape>> {
         // Import the layer
-        let (layer, purpose) = match player.layer {
+        let (_layer, _purpose) = match player.layer {
             Some(ref l) => self.import_layer(l),
             None => self.fail("Invalid proto::LayerShapes with no Layer"),
         }?;
@@ -699,7 +699,9 @@ impl Layers {
 
             let sub_index = layer_pb.sub_index as i16;
             let layer_purpose = match &layer_pb.purpose {
-                Some(purpose) => Layers::proto_to_internal_layer_purpose(sub_index, &purpose.r#type()),
+                Some(purpose) => {
+                    Layers::proto_to_internal_layer_purpose(sub_index, &purpose.r#type())
+                }
                 None => LayerPurpose::Other(sub_index),
             };
             layer.add_purpose(sub_index, layer_purpose)?;
@@ -712,14 +714,15 @@ impl Layers {
         Ok(layers)
     }
 
-    fn proto_to_internal_layer_purpose(sub_index: i16, purpose_pb: &proto::LayerPurposeType)
-        -> LayerPurpose {
+    fn proto_to_internal_layer_purpose(
+        sub_index: i16,
+        purpose_pb: &proto::LayerPurposeType,
+    ) -> LayerPurpose {
         match purpose_pb {
             proto::LayerPurposeType::Label => LayerPurpose::Label,
             _ => LayerPurpose::Other(sub_index),
         }
     }
-
 }
 
 #[cfg(all(test, feature = "proto"))]

@@ -1,0 +1,3 @@
+[submodule "layout21protos/vlsir"]
+	path = layout21protos/vlsir
+	url = git@github.com:vlsir/vlsir

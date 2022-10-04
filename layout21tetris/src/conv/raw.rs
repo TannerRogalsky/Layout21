@@ -36,6 +36,7 @@ struct TempCell<'lib> {
     /// Reference to the source [Cell]
     cell: &'lib Layout,
     /// Reference to the source [Library]
+    #[allow(unused)]
     lib: &'lib Library,
     /// Instances and references to their definitions
     instances: PtrList<Instance>,
@@ -58,6 +59,7 @@ struct TempCellLayer<'lib> {
     /// Instances which intersect with this layer and period
     instances: PtrList<Instance>,
     /// Pitch per layer-period
+    #[allow(unused)]
     pitch: DbUnits,
     /// Number of layer-periods
     nperiods: usize,

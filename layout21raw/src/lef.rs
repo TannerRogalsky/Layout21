@@ -11,8 +11,8 @@ use std::convert::{TryFrom, TryInto};
 // Local imports
 use crate::utils::{ErrorContext, ErrorHelper, Ptr};
 use crate::{
-    Abstract, AbstractPort, Cell, Element, Int, Layer, LayerKey, LayerPurpose, Layers, LayoutError,
-    LayoutResult, Library, Path, Point, Polygon, Rect, Shape, Units,
+    Abstract, AbstractPort, Cell, Int, Layer, LayerKey, Layers, LayoutError, LayoutResult, Library,
+    Path, Point, Polygon, Rect, Shape, Units,
 };
 use lef21;
 
@@ -260,7 +260,7 @@ impl LefImporter {
 
             // FIXME: what layer this goes on.
             // Grab one named `boundary`.
-            let layer = {
+            let _layer = {
                 let mut layers = self.layers.write()?;
                 match layers.names.get("boundary") {
                     Some(key) => key.clone(),
@@ -475,7 +475,6 @@ impl ErrorHelper for LefImporter {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{Element, LayerPurpose};
 
     #[test]
     fn test_lef1() -> LayoutResult<()> {

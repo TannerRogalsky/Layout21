@@ -4,9 +4,7 @@
 //!
 //! This program is the sibiling of gds2proto.
 
-use chrono::NaiveDateTime;
 use clap::Parser;
-use gds21::GdsLibrary;
 use layout21protos::conv as proto_converters;
 use layout21protos::tech as protos;
 use layout21raw as raw;
@@ -77,6 +75,8 @@ fn _main(options: &ProgramOptions) -> Result<(), Box<dyn Error>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::NaiveDateTime;
+    use gds21::GdsLibrary;
 
     #[test]
     fn roundtrip_to_golden_file() {
@@ -124,7 +124,7 @@ mod tests {
         let date = NaiveDateTime::from_timestamp(0, 0);
         golden_gds.set_all_dates(&date);
         output_gds.set_all_dates(&date);
-        
+
         assert_eq!(output_gds, golden_gds);
     }
 

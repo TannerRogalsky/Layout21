@@ -19,8 +19,10 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Group {
     /// Group Name
+    #[allow(unused)]
     name: String,
     /// Constituent Elements
+    #[allow(unused)]
     elements: Vec<Groupable>,
 }
 impl Group {
