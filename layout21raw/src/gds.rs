@@ -80,6 +80,7 @@ impl<'lib> GdsExporter<'lib> {
             Units::Nano => gds21::GdsUnits::new(1e-3, 1e-9),
             Units::Angstrom => gds21::GdsUnits::new(1e-4, 1e-10),
             Units::Pico => gds21::GdsUnits::new(1e-6, 1e-12),
+            Units::Unknown(user, db) => gds21::GdsUnits::new(user, db),
         };
         // And convert each of our `cells` into its `structs`
         for cell in self.lib.cells.iter() {
@@ -567,7 +568,7 @@ impl GdsImporter {
         } else if (gdsunit - 1e-6).abs() < 1e-9 {
             Units::Micro
         } else {
-            return self.fail(format!("Unsupported GDSII Units {:10.3e}", gdsunit));
+            Units::Unknown(units.db_user_unit(), gdsunit)
         };
         self.ctx.pop();
         Ok(rv)
@@ -960,57 +961,68 @@ impl ErrorHelper for GdsImporter {
 
 /// Import a GDS Cell with two polygons:
 /// One assigned to a net, and the other not.
-#[cfg(all(test, feature = "gds"))]
-#[test]
-fn gds_import1() -> LayoutResult<()> {
-    use gds21::*;
-    let gds = GdsLibrary {
-        name: "lib1".into(),
-        structs: vec![GdsStruct {
-            name: "cell1".into(),
-            elems: vec![
-                GdsElement::GdsBoundary(GdsBoundary {
-                    layer: 11,
-                    datatype: 22,
-                    xy: GdsPoint::vec(&[(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
-                    ..Default::default()
-                }),
-                GdsElement::GdsTextElem(GdsTextElem {
-                    string: "net1".into(),
-                    layer: 11,    // Same layer as the boundary
-                    texttype: 66, // Could be anything, for now
-                    xy: GdsPoint::new(1, 1),
-                    ..Default::default()
-                }),
-                GdsElement::GdsBoundary(GdsBoundary {
-                    layer: 33,
-                    datatype: 44,
-                    xy: GdsPoint::vec(&[(10, 10), (12, 10), (12, 12), (10, 12), (10, 10)]),
-                    ..Default::default()
-                }),
-                GdsElement::GdsTextElem(GdsTextElem {
-                    string: "net1".into(),
-                    layer: 44, // *Not* Same layer as the boundary
-                    texttype: 66,
-                    xy: GdsPoint::new(11, 11), // Intersects with the boundary
-                    ..Default::default()
-                }),
-            ],
-            ..Default::default()
-        }],
-        ..Default::default()
-    };
-    let lib = GdsImporter::import(&gds, None)?;
-    assert_eq!(lib.name, "lib1");
-    assert_eq!(lib.cells.len(), 1);
-    let cell = lib.cells.first().unwrap().clone();
-    let cell = cell.read()?;
-    let layout = cell.layout.as_ref().unwrap();
-    assert_eq!(layout.name, "cell1");
-    let elem = &layout.elems[0];
-    assert_eq!(elem.net, Some("net1".to_string()));
-    let elem = &layout.elems[1];
-    assert_eq!(elem.net, None);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    Ok(())
+    #[test]
+    fn gds_import1() -> LayoutResult<()> {
+        use gds21::*;
+        let gds = GdsLibrary {
+            name: "lib1".into(),
+            structs: vec![GdsStruct {
+                name: "cell1".into(),
+                elems: vec![
+                    GdsElement::GdsBoundary(GdsBoundary {
+                        layer: 11,
+                        datatype: 22,
+                        xy: GdsPoint::vec(&[(0, 0), (2, 0), (2, 2), (0, 2), (0, 0)]),
+                        ..Default::default()
+                    }),
+                    GdsElement::GdsTextElem(GdsTextElem {
+                        string: "net1".into(),
+                        layer: 11,    // Same layer as the boundary
+                        texttype: 66, // Could be anything, for now
+                        xy: GdsPoint::new(1, 1),
+                        ..Default::default()
+                    }),
+                    GdsElement::GdsBoundary(GdsBoundary {
+                        layer: 33,
+                        datatype: 44,
+                        xy: GdsPoint::vec(&[(10, 10), (12, 10), (12, 12), (10, 12), (10, 10)]),
+                        ..Default::default()
+                    }),
+                    GdsElement::GdsTextElem(GdsTextElem {
+                        string: "net1".into(),
+                        layer: 44, // *Not* Same layer as the boundary
+                        texttype: 66,
+                        xy: GdsPoint::new(11, 11), // Intersects with the boundary
+                        ..Default::default()
+                    }),
+                ],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let lib = GdsImporter::import(&gds, None)?;
+        assert_eq!(lib.name, "lib1");
+        assert_eq!(lib.cells.len(), 1);
+        let cell = lib.cells.first().unwrap().clone();
+        let cell = cell.read()?;
+        let layout = cell.layout.as_ref().unwrap();
+        assert_eq!(layout.name, "cell1");
+        let elem = &layout.elems[0];
+        assert_eq!(elem.net, Some("net1".to_string()));
+        let elem = &layout.elems[1];
+        assert_eq!(elem.net, None);
+
+        Ok(())
+    }
+
+    #[test]
+    fn gds_units_test() {
+        let mut importer = GdsImporter::default();
+        let units = gds21::GdsUnits::new(5e-9f64, 5e-9f64);
+        importer.import_units(&units).unwrap();
+    }
 }

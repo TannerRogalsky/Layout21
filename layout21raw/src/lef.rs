@@ -50,11 +50,12 @@ impl<'lib> LefExporter<'lib> {
     /// Export the [Units] distance definition
     /// Lef sets this as a "databuse units per micron" numeric field, although only a few values are accepted.
     fn export_units(&mut self, units: &Units) -> LayoutResult<lef21::LefUnits> {
-        let scale = match units {
+        let scale = match *units {
             Units::Micro => 1,
             Units::Nano => 1000,
             Units::Angstrom => 10_000,
             Units::Pico => 1_000_000,
+            Units::Unknown(user, db) => (user / db) as i64,
         };
         let dbu = match lef21::LefDbuPerMicron::try_new(lef21::LefDecimal::new(scale, 0)) {
             Ok(dbu) => Ok(dbu),

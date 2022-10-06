@@ -31,10 +31,7 @@ impl BoundBox {
     /// Create a new [BoundBox] from a single [Point].
     /// The resultant [BoundBox] comprises solely the point, having zero area.
     pub fn from_point(pt: &Point) -> Self {
-        Self {
-            p0: *pt,
-            p1: *pt,
-        }
+        Self { p0: *pt, p1: *pt }
     }
     /// Create a new [BoundBox] from two points
     pub fn from_points(p0: &Point, p1: &Point) -> Self {
@@ -58,6 +55,18 @@ impl BoundBox {
     pub fn contains(&self, pt: &Point) -> bool {
         self.p0.x <= pt.x && self.p1.x >= pt.x && self.p0.y <= pt.y && self.p1.y >= pt.y
     }
+
+    pub fn intersects(&self, other: &Self) -> bool {
+        [
+            self.p0,
+            Point::new(self.p1.x, self.p0.y),
+            self.p1,
+            Point::new(self.p0.x, self.p1.y),
+        ]
+        .iter()
+        .any(|p| other.contains(p))
+    }
+
     /// Expand an existing [BoundBox] in all directions by `delta`
     pub fn expand(&mut self, delta: Int) {
         self.p0.x -= delta;

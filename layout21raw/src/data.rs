@@ -36,7 +36,7 @@ new_key_type! {
 
 /// Distance Units Enumeration
 /// FIXME: deprecate in favor of [SiUnits]
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 pub enum Units {
     /// Micrometers, or microns for we olde folke
     Micro,
@@ -46,6 +46,7 @@ pub enum Units {
     Angstrom,
     /// Picometers
     Pico,
+    Unknown(f64, f64),
 }
 impl Default for Units {
     /// Default units are nanometers
@@ -508,7 +509,7 @@ impl Layout {
     /// Create a rectangular [BoundBox] surrounding all elements in the [Layout].
     pub fn bbox(&self) -> BoundBox {
         let mut bbox = BoundBox::empty();
-        for elem in &self.elems {
+        for elem in self.flatten().unwrap_or_default() {
             bbox = elem.inner.union(&bbox);
         }
         bbox

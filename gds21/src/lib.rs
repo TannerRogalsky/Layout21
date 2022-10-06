@@ -82,9 +82,7 @@
 use std::convert::{TryFrom, TryInto};
 use std::error::Error;
 use std::fs::File;
-#[allow(unused_imports)]
-use std::io::prelude::*;
-use std::io::{BufWriter, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{BufWriter, Cursor, SeekFrom, Write};
 use std::path::Path;
 use std::{fmt, mem, str};
 
@@ -405,11 +403,16 @@ impl GdsUnits {
     pub fn new(num1: f64, num2: f64) -> Self {
         Self(num1, num2)
     }
+
+    pub fn db_user_unit(&self) -> f64 {
+        self.0
+    }
+
     /// Get the database-unit size, in meters. Used for all spatial data.
     pub fn db_unit(&self) -> f64 {
         self.1
     }
-    /// Get the user-unit size, in meters. Largely for display/ debug.
+    /// Get the user-unit size, in meters. Largely for display / debug.
     pub fn user_unit(&self) -> f64 {
         self.0 / self.1
     }
@@ -1120,9 +1123,11 @@ impl From<&str> for GdsError {
         GdsError::Str(e.to_string())
     }
 }
+
 #[cfg(any(test, feature = "selftest"))]
 /// Check `lib` matches across a write-read round-trip cycle
 pub fn roundtrip(lib: &GdsLibrary) -> GdsResult<()> {
+    use std::io::{Read, Seek};
     use tempfile::tempfile;
 
     // Write to a temporary file

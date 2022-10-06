@@ -73,7 +73,7 @@ impl<'lib> ProtoExporter<'lib> {
             Units::Micro => proto::Units::Micro,
             Units::Nano => proto::Units::Nano,
             Units::Angstrom => proto::Units::Angstrom,
-            Units::Pico => unimplemented!(),
+            _ => unimplemented!(),
         })
     }
     /// Convert a [Cell] to a [proto::Cell] cell-definition
@@ -780,7 +780,7 @@ fn proto1() -> LayoutResult<()> {
             Element {
                 net: Some("prt_path_net".to_string()),
                 layer,
-                purpose: purpose,
+                purpose,
                 inner: Shape::Path(Path {
                     width: 5,
                     points: vec![Point::default(), Point::default(), Point::default()],
