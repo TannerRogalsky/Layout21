@@ -521,7 +521,37 @@ impl Layout {
         flatten_helper(self.name.clone(), self, &Transform::identity(), &mut elems)?;
         Ok(elems)
     }
+
+    pub fn flatten_instances(&self) -> LayoutResult<Vec<(String, Transform, Instance)>> {
+        let mut elems = Vec::new();
+        flatten_helper_insts(self.name.clone(), self, &Transform::identity(), &mut elems)?;
+        Ok(elems)
+    }
 }
+
+fn flatten_helper_insts(
+    parent: String,
+    layout: &Layout,
+    trans: &Transform,
+    elems: &mut Vec<(String, Transform, Instance)>,
+) -> LayoutResult<()> {
+    // Visit all of `layout`'s instances, recursively getting their elements
+    for inst in &layout.insts {
+        // Get the cell's layout-definition, or fail
+        let cell = inst.cell.read()?;
+        let layout = cell.layout.as_ref().unwrap();
+
+        // Create a new [Transform], cascading the parent's and instance's
+        let inst_trans = Transform::from_instance(&inst.loc, inst.reflect_vert, inst.angle);
+        let trans = Transform::cascade(trans, &inst_trans);
+        elems.push((format!("{}/{}", parent, layout.name), trans, inst.clone()));
+
+        // And recursively add its elements
+        flatten_helper_insts(format!("{}/{}", parent, layout.name), layout, &trans, elems)?;
+    }
+    Ok(())
+}
+
 /// Internal helper and core logic for [Layout::flatten].
 fn flatten_helper(
     parent: String,
@@ -617,3 +647,28 @@ pub struct InstancePlace {
 //         unimplemented!()
 //     }
 // }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn run() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("out.gds");
+        let data = std::fs::read(path).unwrap();
+        let gds = crate::gds::gds21::GdsLibrary::from_bytes(&data).unwrap();
+        let lib = crate::gds::GdsImporter::import(&gds, None).unwrap();
+
+        let cell_ptr = lib.cells.last().unwrap();
+        let cell = cell_ptr.read().unwrap();
+        let layout = cell.layout.as_ref().unwrap();
+
+        let insts = layout.flatten_instances().unwrap();
+        for (path, t, inst) in insts.iter() {
+            if path.ends_with("SML14D1_ec_buffer_wg") {
+                let p = inst.loc.transform(t);
+                println!("{path} => {:?}", p);
+            }
+        }
+    }
+}
