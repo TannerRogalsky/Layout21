@@ -518,12 +518,13 @@ impl Layout {
     pub fn flatten(&self) -> LayoutResult<Vec<Element>> {
         // Kick off recursive calls, with the identity-transform applied for the top-level `layout`
         let mut elems = Vec::new();
-        flatten_helper(self, &Transform::identity(), &mut elems)?;
+        flatten_helper(self.name.clone(), self, &Transform::identity(), &mut elems)?;
         Ok(elems)
     }
 }
 /// Internal helper and core logic for [Layout::flatten].
 fn flatten_helper(
+    parent: String,
     layout: &Layout,
     trans: &Transform,
     elems: &mut Vec<Element>,
@@ -533,6 +534,7 @@ fn flatten_helper(
         // Clone all other data (layer, net, etc.)
         // FIXME: hierarchy flattening of net labels
         let mut new_elem = elem.clone();
+        new_elem.net = Some(parent.clone());
         // And translate the inner shape by `trans`
         new_elem.inner = elem.inner.transform(trans);
         elems.push(new_elem);
@@ -550,7 +552,7 @@ fn flatten_helper(
         let trans = Transform::cascade(trans, &inst_trans);
 
         // And recursively add its elements
-        flatten_helper(layout, &trans, elems)?;
+        flatten_helper(format!("{}/{}", parent, layout.name), layout, &trans, elems)?;
     }
     Ok(())
 }
