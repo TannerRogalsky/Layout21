@@ -4,9 +4,7 @@
 //!
 //! This program is the sibiling of gds2proto.
 
-use chrono::NaiveDateTime;
 use clap::Parser;
-use gds21::GdsLibrary;
 use layout21protos::conv as proto_converters;
 use layout21protos::tech as protos;
 use layout21raw as raw;

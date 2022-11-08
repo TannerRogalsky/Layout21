@@ -35,8 +35,6 @@ new_key_type! {
 struct TempCell<'lib> {
     /// Reference to the source [Cell]
     cell: &'lib Layout,
-    /// Reference to the source [Library]
-    lib: &'lib Library,
     /// Instances and references to their definitions
     instances: PtrList<Instance>,
     /// Cuts, arranged by Layer
@@ -57,8 +55,6 @@ struct TempCellLayer<'lib> {
     cell: &'lib TempCell<'lib>,
     /// Instances which intersect with this layer and period
     instances: PtrList<Instance>,
-    /// Pitch per layer-period
-    pitch: DbUnits,
     /// Number of layer-periods
     nperiods: usize,
     /// Spanning distance in the layer's "infinite" dimension
@@ -304,7 +300,6 @@ impl<'lib> RawExporter {
         // And create our (temporary) cell data!
         Ok(TempCell {
             cell: layout,
-            lib: &self.lib,
             instances,
             assignments,
             top_assns,
@@ -670,7 +665,6 @@ impl<'lib> RawExporter {
             cell: temp_cell,
             instances,
             nperiods,
-            pitch: layer.pitch,
             span,
         })
     }

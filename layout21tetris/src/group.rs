@@ -19,9 +19,9 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Group {
     /// Group Name
-    name: String,
+    pub name: String,
     /// Constituent Elements
-    elements: Vec<Groupable>,
+    pub elements: Vec<Groupable>,
 }
 impl Group {
     /// Size of the Instance's rectangular `boundbox`, i.e. the zero-origin `boundbox` of its `cell`.
