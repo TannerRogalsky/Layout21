@@ -888,7 +888,11 @@ impl GdsImporter {
                 self.fail("Unsupported GDSII Array Setting: Absolute Magnitude/ Angle")?;
             }
             if strans.mag.is_some() {
-                self.fail("Unsupported GDSII Array Setting: Magnitude")?;
+                tracing::warn!(
+                    "Unsupported GDSII Array Setting: Magnitude. ARef Name: {}",
+                    cname
+                );
+                // self.fail("Unsupported GDSII Array Setting: Magnitude")?;
             }
             if let Some(a) = strans.angle {
                 // The angle-setting rotates the *entire* array lattice together.
