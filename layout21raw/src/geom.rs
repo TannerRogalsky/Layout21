@@ -395,13 +395,12 @@ impl Transform {
     /// Create a transform from instance fields: location, rotation, and reflection
     pub fn from_instance(loc: &Point, reflect_vert: bool, angle: Option<f64>) -> Self {
         let b = [loc.x as f64, loc.y as f64];
-        let (mut sin, mut cos) = (0., 1.);
-        if let Some(angle) = angle {
-            sin = angle.to_radians().sin();
-            cos = angle.to_radians().cos();
-        }
-        let cos_refl = if reflect_vert { -cos } else { cos };
-        let a = [[cos, -sin], [sin, cos_refl]];
+        let (sin, cos) = match angle {
+            Some(angle) => angle.to_radians().sin_cos(),
+            None => (0., 1.),
+        };
+        let mag = if reflect_vert { -1.0f64 } else { 1.0 };
+        let a = [[cos * mag.abs(), -sin * mag], [sin * mag.abs(), cos * mag]];
         Self { a, b }
     }
     /// Create a new [Transform] that is the cascade of `parent` and `child`.
@@ -555,6 +554,17 @@ pub mod tests {
         let cascade2 = Transform::cascade(&trans2, &trans1);
         let pc1 = p.transform(&cascade2);
         assert_eq!(pc1, Point::new(2, 0));
+    }
+    #[test]
+    fn test_reflect_rotate() {
+        let t1 = Transform::from_instance(&Point::new(5, 10), true, Some(90.));
+        let t2 = Transform::from_instance(&Point::new(5, 10), false, Some(90.));
+
+        let p = Point::new(10, 10);
+        let p1 = p.transform(&t1);
+        let p2 = p.transform(&t2);
+
+        assert!(p1 != p2);
     }
     #[test]
     fn test_polygon_contains() {
